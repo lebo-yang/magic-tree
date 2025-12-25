@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Emoji Gesture Xmas Tree - Scarf Edition</title>
+    <title>Gesture Core Rotation Xmas Tree</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050505; font-family: sans-serif; touch-action: none; }
         #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
@@ -25,10 +25,9 @@
 <body>
 
     <div id="overlay">
-        <h1>🎄 温暖围巾魔法树 🎄</h1>
-        <p style="font-size: 12px; margin-bottom: 25px; opacity: 0.7;">捏合手掌：切换球体星球 / 抓取照片</p>
-        <button class="start-btn" id="startBtn" onclick="initExperience()">开启魔法</button>
-        <div id="debug-info" style="font-size: 10px; margin-top: 15px; color: #ff4444;"></div>
+        <h1>🎄 核心驱动魔法树 🎄</h1>
+        <p style="font-size: 12px; margin-bottom: 25px; opacity: 0.7;">捏合手掌(闭合)：核心球体自转 | 张开：圆锥体自转</p>
+        <button class="start-btn" id="startBtn" onclick="initExperience()">启动核心</button>
     </div>
 
     <video class="input_video" playsinline></video>
@@ -70,17 +69,22 @@
         let raycaster = new THREE.Raycaster();
         let mouse = new THREE.Vector2();
         let selectedPhoto = null;
-        let sphereRotation = { y: 0, targetY: 0, posY: 17 };
+        let controlParams = { sphereRotY: 0, sphereRotX: 0, posY: 17 };
+
+        const STAR_Y = 17; // 五角星核心坐标
 
         function init3D() {
             scene = new THREE.Scene();
             treeGroup = new THREE.Group();
             particleGroup = new THREE.Group();
+            
+            // 将粒子组中心定位在五角星位置，便于自转
+            particleGroup.position.y = STAR_Y; 
             scene.add(treeGroup);
-            treeGroup.add(particleGroup);
+            scene.add(particleGroup);
 
             camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 15, 45);
+            camera.position.set(0, 15, 50);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -102,40 +106,41 @@
             const starTex = createTex('⭐');
             const treeTex = createTex('🎄');
             const sparkleTex = createTex('✨');
-            const scarfTex = createTex('🧣'); // 新增红色围巾纹理
+            const scarfTex = createTex('🧣');
 
-            // 顶部星
+            // 核心星
             const topStar = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex }));
-            topStar.scale.set(6, 6, 1); topStar.position.y = 17; treeGroup.add(topStar);
+            topStar.scale.set(6, 6, 1);
+            topStar.position.set(0, STAR_Y, 0);
+            scene.add(topStar); 
 
-            // 粒子系统
-            const totalParticles = 350;
-            for (let i = 0; i < totalParticles; i++) {
-                // 概率分配：50% 树，30% 星光，20% 围巾
-                let tex = treeTex;
+            // 粒子系统初始化
+            const total = 400;
+            for (let i = 0; i < total; i++) {
+                // 红色粒子 rand > 1.1 条件（永远为假，不生成🧣）
                 let rand = Math.random();
-                if (rand > 0.8) tex = scarfTex;
-                else if (rand > 0.5) tex = sparkleTex;
-
+                let tex = (rand > 1.1) ? scarfTex : (Math.random() > 0.5 ? treeTex : sparkleTex);
+                
                 const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
                 
-                // 树形布局
-                const y = (Math.random() * 25) - 10;
-                const r = (1 - (y + 10) / 25) * 12 + 0.5;
-                const theta = y * 1.5 + Math.random() * Math.PI * 2;
+                // 树形态：相对于圆锥顶点的坐标
+                const y = (Math.random() * 25) - 25; // 顶点在0，向下延伸
+                const r = (Math.abs(y) / 25) * 12 + 0.5;
+                const theta = Math.random() * Math.PI * 2;
                 sprite.userData.treePos = new THREE.Vector3(r * Math.cos(theta), y, r * Math.sin(theta));
                 
-                // 球体布局
-                const phi = Math.acos(-1 + (2 * i) / totalParticles);
-                const rho = Math.sqrt(totalParticles * Math.PI) * phi;
+                // 球形态：相对于球心(0,0,0)的坐标 (因为父级particleGroup已经在STAR_Y)
+                const phi = Math.acos(-1 + (2 * i) / total);
+                const rho = Math.sqrt(total * Math.PI) * phi;
+                const sphereR = 8;
                 sprite.userData.spherePos = new THREE.Vector3(
-                    8 * Math.sin(phi) * Math.cos(rho), 
-                    8 * Math.cos(phi) + 17, 
-                    8 * Math.sin(phi) * Math.sin(rho)
+                    sphereR * Math.sin(phi) * Math.cos(rho),
+                    sphereR * Math.cos(phi),
+                    sphereR * Math.sin(phi) * Math.sin(rho)
                 );
 
                 sprite.position.copy(sprite.userData.treePos);
-                sprite.scale.set(1.6, 1.6, 1);
+                sprite.scale.set(1.5, 1.5, 1);
                 particleGroup.add(sprite);
                 particles.push(sprite);
             }
@@ -143,51 +148,43 @@
         }
 
         window.initExperience = async function() {
-            const btn = document.getElementById('startBtn');
-            btn.innerText = "加载中..."; btn.disabled = true;
+            document.getElementById('startBtn').innerText = "启动中...";
             try {
                 init3D();
                 await initHandTracking();
                 document.getElementById('overlay').style.display = 'none';
-            } catch (err) {
-                document.getElementById('debug-info').innerText = "启动失败，请检查网络";
-                btn.innerText = "重试"; btn.disabled = false;
-            }
+            } catch (err) { console.error(err); }
         }
 
         async function initHandTracking() {
             const video = document.querySelector('.input_video');
             const status = document.getElementById('status');
-            const pointer = document.getElementById('hand-pointer');
-
             const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-            hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
+            hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.5 });
 
             hands.onResults((res) => {
                 if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
                     const pts = res.multiHandLandmarks[0];
-                    pointer.style.display = 'block';
-                    pointer.style.left = (1 - pts[8].x) * window.innerWidth + 'px';
-                    pointer.style.top = pts[8].y * window.innerHeight + 'px';
                     mouse.x = ((1 - pts[8].x) * 2) - 1;
                     mouse.y = -(pts[8].y * 2) + 1;
-
                     const isClosed = Math.hypot(pts[8].x - pts[4].x, pts[8].y - pts[4].y) < 0.08;
+                    
                     if (isClosed) {
-                        status.innerText = "CLOSED"; switchState('sphere');
-                        sphereRotation.targetY = mouse.x * Math.PI;
-                        sphereRotation.posY = 17 + mouse.y * 15;
+                        status.innerText = "CLOSED (SPHERE SELF-ROT)";
+                        switchState('sphere');
+                        controlParams.sphereRotY = mouse.x * Math.PI;
+                        controlParams.sphereRotX = -mouse.y * Math.PI * 0.5;
+                        controlParams.posY = STAR_Y + mouse.y * 10;
                         checkIntersection();
                     } else {
-                        status.innerText = "OPEN"; switchState('tree');
+                        status.innerText = "OPEN (CONE ROT)";
+                        switchState('tree');
                         if(selectedPhoto) shrinkPhoto(selectedPhoto);
-                        selectedPhoto = null; sphereRotation.posY = 17;
+                        selectedPhoto = null;
+                        controlParams.posY = STAR_Y;
                     }
-                } else {
-                    pointer.style.display = 'none'; status.innerText = "SEARCHING";
                 }
             });
-
             const cam = new window.Camera(video, { onFrame: async() => await hands.send({image:video}), width:640, height:480 });
             return cam.start();
         }
@@ -235,12 +232,18 @@
         function animate() {
             requestAnimationFrame(animate);
             if (currentState === 'sphere') {
-                particleGroup.rotation.y += (sphereRotation.targetY - particleGroup.rotation.y) * 0.05;
-                particleGroup.position.y += (sphereRotation.posY - 17 - particleGroup.position.y) * 0.1;
-                particleGroup.rotation.z += 0.01;
+                // 球形态：核心自转，手掌改变旋转面角度和垂直高度
+                particleGroup.rotation.y += 0.02; // 自转
+                particleGroup.rotation.x += (controlParams.sphereRotX - particleGroup.rotation.x) * 0.05;
+                particleGroup.rotation.z += (controlParams.sphereRotY * 0.2 - particleGroup.rotation.z) * 0.05;
+                particleGroup.position.y += (controlParams.posY - particleGroup.position.y) * 0.1;
             } else {
-                particleGroup.rotation.y *= 0.95; particleGroup.position.y *= 0.95;
-                treeGroup.rotation.y += 0.005;
+                // 树形态：圆锥自转（绕Y轴）
+                particleGroup.rotation.x *= 0.9;
+                particleGroup.rotation.z *= 0.9;
+                particleGroup.position.y += (STAR_Y - particleGroup.position.y) * 0.1;
+                particleGroup.rotation.y += 0.01; 
+                treeGroup.rotation.y += 0.005; // 照片跟随旋转
             }
             composer.render();
         }
