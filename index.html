@@ -235,5 +235,7 @@ import { RenderPass } from './libs/three/examples/jsm/postprocessing/RenderPass.
       if (!HandsLib) { setStatus("MP_FAIL"); return; }
       if (!window.Camera) { setStatus("CAM_UTIL_FAIL"); return; }
 
-      const hands = new HandsLib({ locateFile: (f) => `h
+      const hands = new HandsLib({locateFile: (file) => `./libs/mediapipe/hands/${file}`
+
+
 
