@@ -7,7 +7,6 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #050505; font-family: sans-serif; }
         #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
-        
         #overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: radial-gradient(circle, #1a1a1a 0%, #050505 100%);
@@ -19,11 +18,9 @@
             color: #FFD700; font-size: 20px; cursor: pointer; border-radius: 50px;
             font-weight: bold; box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
         }
-
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; padding: 20px; box-sizing: border-box; }
         .hud { color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); font-size: 12px; font-weight: bold; }
-        .input_video { position: absolute; top: 15px; right: 15px; width: 80px; height: 60px; border-radius: 10px; opacity: 0.5; transform: scaleX(-1); border: 1px solid #FFD700; }
-        
+        .input_video { position: absolute; top: 15px; right: 15px; width: 90px; height: 70px; border-radius: 10px; opacity: 0.4; transform: scaleX(-1); border: 1px solid #FFD700; background: #000; }
         #upload-zone { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 100; pointer-events: auto; }
         .upload-label { background: rgba(255,215,0,0.2); border: 1px solid #FFD700; color: #FFD700; padding: 10px 20px; border-radius: 20px; cursor: pointer; font-size: 14px; }
     </style>
@@ -31,17 +28,17 @@
 <body>
 
     <div id="overlay">
-        <h1 style="margin-bottom: 10px;">🎄 圣诞照片魔法树 🎄</h1>
-        <button class="start-btn" onclick="initExperience()">开启音乐与魔法</button>
-        <p style="font-size: 12px; margin-top: 20px; opacity: 0.6;">(点击后请允许摄像头权限)</p>
+        <h1 style="margin-bottom: 10px;">🎄 圣诞手势魔法 🎄</h1>
+        <button class="start-btn" onclick="initExperience()">开启音乐与手势</button>
+        <p style="font-size: 12px; margin-top: 20px; opacity: 0.6;">(Safari 用户请在点击后允许摄像头权限)</p>
     </div>
 
     <video class="input_video" playsinline></video>
     
     <div id="ui-layer">
-        <div class="hud">STATUS: <span id="status">READY</span></div>
+        <div class="hud">STATUS: <span id="status">WAITING...</span></div>
         <div id="upload-zone">
-            <label class="upload-label">📸 上传照片做成礼物
+            <label class="upload-label">📸 上传照片礼物
                 <input type="file" id="photo-upload" hidden multiple accept="image/*">
             </label>
         </div>
@@ -49,8 +46,9 @@
 
     <div id="canvas-container"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    
     <script type="importmap">
         {
             "imports": {
@@ -72,33 +70,34 @@
         let particles = [], boxes = [], currentState = 'tree', targetRotation = 0;
         const textureLoader = new THREE.TextureLoader();
 
-        // 音乐地址（使用 HTTPS 直接音频链接，确保 Safari 兼容）
+        // 备用音乐源
         const MUSIC_URL = 'https://link.hhtjim.com/163/2657777735.mp3'; 
 
         window.initExperience = function() {
             document.getElementById('overlay').style.display = 'none';
             setupAudio();
-            init();
+            init3D();
+            // 确保 MediaPipe 在用户交互后启动
+            setTimeout(initMediaPipe, 500);
         }
 
         function setupAudio() {
-            const audio = new Audio();
-            audio.src = MUSIC_URL;
-            audio.crossOrigin = "anonymous";
-            audio.loop = true;
-            
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const source = audioContext.createMediaElementSource(audio);
-            analyser = audioContext.createAnalyser();
-            analyser.fftSize = 256;
-            source.connect(analyser);
-            analyser.connect(audioContext.destination);
-            
-            dataArray = new Uint8Array(analyser.frequencyBinCount);
-            audio.play(); // 用户点击后播放，Safari 允许
+            try {
+                const audio = new Audio();
+                audio.src = MUSIC_URL;
+                audio.crossOrigin = "anonymous";
+                audio.loop = true;
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaElementSource(audio);
+                analyser = audioContext.createAnalyser();
+                source.connect(analyser);
+                analyser.connect(audioContext.destination);
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                audio.play();
+            } catch (e) { console.log("Audio fails", e); }
         }
 
-        function init() {
+        function init3D() {
             scene = new THREE.Scene();
             treeGroup = new THREE.Group();
             scene.add(treeGroup);
@@ -106,46 +105,46 @@
             camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 12, 45);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.toneMapping = THREE.ReinhardToneMapping;
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
             const renderPass = new RenderPass(scene, camera);
-            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.8, 0.4, 0.85);
+            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
             composer = new EffectComposer(renderer);
             composer.addPass(renderPass);
             composer.addPass(bloomPass);
 
-            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
             createEnhancedTree();
-            initMediaPipe();
             
             document.getElementById('photo-upload').addEventListener('change', handleUpload);
             animate();
         }
 
         function createEnhancedTree() {
-            // 1. 顶部五角星
+            // --- 修正五角星：垂直正向绘制 ---
             const starShape = new THREE.Shape();
-            for(let i=0; i<10; i++){
-                let r = (i%2===0) ? 2.5 : 1.2;
-                let a = i * Math.PI / 5;
-                if(i===0) starShape.moveTo(Math.cos(a)*r, Math.sin(a)*r);
-                else starShape.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+            const points = 5;
+            const outerRadius = 2.5;
+            const innerRadius = 1.0;
+            for (let i = 0; i < points * 2; i++) {
+                const angle = (i * Math.PI) / points - Math.PI / 2; // -Math.PI/2 使其垂直向上
+                const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                if (i === 0) starShape.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+                else starShape.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
             }
-            topStar = new THREE.Mesh(
-                new THREE.ExtrudeGeometry(starShape, {depth: 0.5, bevelEnabled: false}),
-                new THREE.MeshBasicMaterial({color: 0xFFD700})
-            );
-            topStar.position.y = 16;
+            const starGeo = new THREE.ExtrudeGeometry(starShape, { depth: 0.4, bevelEnabled: false });
+            topStar = new THREE.Mesh(starGeo, new THREE.MeshBasicMaterial({ color: 0xFFD700 }));
+            topStar.position.set(0, 16.5, 0); // 置于树顶
             treeGroup.add(topStar);
 
-            // 2. 圣诞树粒子
+            // 圣诞树主体
             const mats = [
                 new THREE.MeshStandardMaterial({ color: 0xFFD700, emissive: 0xFFD700, emissiveIntensity: 0.5 }),
-                new THREE.MeshStandardMaterial({ color: 0x00FF44, emissive: 0x00FF44, emissiveIntensity: 0.2 }),
-                new THREE.MeshStandardMaterial({ color: 0xFF0033, emissive: 0xFF0033, emissiveIntensity: 0.2 })
+                new THREE.MeshStandardMaterial({ color: 0x00FF66, emissive: 0x00FF66, emissiveIntensity: 0.2 }),
+                new THREE.MeshStandardMaterial({ color: 0xFF2244, emissive: 0xFF2244, emissiveIntensity: 0.2 })
             ];
             for (let i = 0; i < 400; i++) {
                 const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), mats[i % 3]);
@@ -160,50 +159,70 @@
             }
         }
 
-        async function handleUpload(e) {
+        async function initMediaPipe() {
+            const video = document.querySelector('.input_video');
+            // 兼容 Safari 的全局 Hands 检查
+            const HandsClass = window.Hands || (window.mediapipe && window.mediapipe.hands && window.mediapipe.hands.Hands);
+            
+            if (!HandsClass) {
+                document.getElementById('status').innerText = "ERROR: LIBRARY NOT LOADED";
+                return;
+            }
+
+            const hands = new HandsClass({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            hands.onResults((res) => {
+                if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
+                    document.getElementById('status').innerText = "MAGIC TRACKING";
+                    const pts = res.multiHandLandmarks[0];
+                    // 左右移动手势控制旋转
+                    targetRotation = (pts[8].x - 0.5) * Math.PI * 1.5;
+                    // 捏合距离
+                    const dist = Math.hypot(pts[8].x - pts[4].x, pts[8].y - pts[4].y);
+                    switchState(dist < 0.08 ? 'scatter' : 'tree');
+                } else {
+                    document.getElementById('status').innerText = "SEARCHING HAND...";
+                }
+            });
+
+            const CameraClass = window.Camera;
+            if (CameraClass) {
+                const cam = new CameraClass(video, {
+                    onFrame: async () => { await hands.send({ image: video }); },
+                    width: 640, height: 480
+                });
+                cam.start();
+            }
+        }
+
+        function handleUpload(e) {
             const files = e.target.files;
             for (let file of files) {
                 const url = URL.createObjectURL(file);
                 textureLoader.load(url, (tex) => {
-                    const boxGeo = new THREE.BoxGeometry(2.5, 2.5, 2.5);
-                    const boxMat = new THREE.MeshStandardMaterial({ map: tex });
-                    const box = new THREE.Mesh(boxGeo, boxMat);
-                    
-                    // 随机位置初始化
-                    box.position.set(Math.random()*40-20, -20, Math.random()*40-20);
+                    const box = new THREE.Mesh(
+                        new THREE.BoxGeometry(2.5, 2.5, 2.5),
+                        new THREE.MeshStandardMaterial({ map: tex })
+                    );
+                    box.position.set(Math.random()*20-10, -30, Math.random()*20-10);
                     treeGroup.add(box);
-                    
-                    // 目标：挂在星带螺旋线上
                     const t = Math.random();
                     const y = t * 20 - 5;
-                    const r = (1 - t) * 10 + 2;
-                    const theta = t * 20;
-                    const targetPos = new THREE.Vector3(r * Math.cos(theta), y, r * Math.sin(theta));
-                    
-                    gsap.to(box.position, {
-                        x: targetPos.x, y: targetPos.y, z: targetPos.z,
-                        duration: 2, ease: "back.out(1.7)"
-                    });
+                    const r = (1 - t) * 10 + 3;
+                    const targetPos = new THREE.Vector3(r * Math.cos(t*20), y, r * Math.sin(t*20));
+                    gsap.to(box.position, { x: targetPos.x, y: targetPos.y, z: targetPos.z, duration: 2, ease: "back.out" });
                     boxes.push(box);
                 });
             }
-        }
-
-        async function initMediaPipe() {
-            const video = document.querySelector('.input_video');
-            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-            hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.6 });
-            hands.onResults((res) => {
-                if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
-                    const pts = res.multiHandLandmarks[0];
-                    targetRotation = (pts[8].x - 0.5) * Math.PI * 1.5;
-                    const dist = Math.hypot(pts[8].x - pts[4].x, pts[8].y - pts[4].y);
-                    switchState(dist < 0.06 ? 'scatter' : 'tree');
-                    document.getElementById('status').innerText = "TRACKING";
-                }
-            });
-            const cam = new Camera(video, {onFrame: async () => await hands.send({image: video}), width: 640, height: 480});
-            cam.start();
         }
 
         function switchState(next) {
@@ -217,24 +236,24 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            
-            // 音乐节奏同步
             if (analyser && topStar) {
                 analyser.getByteFrequencyData(dataArray);
                 let avg = dataArray.reduce((a,b) => a+b) / dataArray.length;
-                let scale = 1 + avg / 100;
-                topStar.scale.set(scale, scale, scale);
-                topStar.material.color.setHSL(0.1, 1, 0.5 + avg / 255);
+                let s = 1 + avg / 80;
+                topStar.scale.set(s, s, s);
+                topStar.rotation.z += 0.02; // 让五角星自转
             }
-
             treeGroup.rotation.y += (targetRotation - treeGroup.rotation.y) * 0.05;
             if(currentState === 'tree') treeGroup.rotation.y += 0.005;
-            
-            // 礼物盒自转
-            boxes.forEach(b => b.rotation.y += 0.02);
-
+            boxes.forEach(b => b.rotation.y += 0.01);
             composer.render();
         }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
