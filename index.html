@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2025 圣诞魔法</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #050a05; font-family: sans-serif; }
+        #ui-layer { 
+            position: absolute; top: 15px; left: 15px; color: #d4af37; z-index: 100;
+            background: rgba(0,0,0,0.4); padding: 10px; border-radius: 12px; pointer-events: none;
+        }
+        .interactive { pointer-events: auto; }
+        #video-container { 
+            position: absolute; bottom: 10px; right: 10px; width: 100px; height: 130px; 
+            border: 1px solid #d4af37; border-radius: 8px; overflow: hidden; 
+            transform: scaleX(-1); z-index: 50;
+        }
+        #video-input, #output-canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+        .btn {
+            display: inline-block; background: #c41e3a; color: white; padding: 8px 15px; 
+            border-radius: 20px; cursor: pointer; margin: 5px 0; font-size: 13px; border: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="ui-layer">
+    <h3 style="margin:0">🎄 圣诞魔法相册</h3>
+    <div class="interactive">
+        <iframe frameborder="no" border="0" marginwidth="0" marginheight="0" width=250 height=52 src="//music.163.com/outchain/player?type=2&id=28768058&auto=0&height=32"></iframe>
+        <br>
+        <label class="btn">添加照片 📸 <input type="file" id="photo-upload" hidden multiple accept="image/*"></label>
+    </div>
+    <p id="status" style="font-size: 12px; color: #fff;">等待摄像头授权...</p>
+</div>
+
+<div id="video-container">
+    <video id="video-input" playsinline muted></video>
+    <canvas id="output-canvas"></canvas>
+</div>
+
+<div id="canvas-container"></div>
+
+<script src="https://lib.baomitu.com/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+<script type="module">
+    let scene, camera, renderer, treeGroup;
+    const particles = [];
+    const photoGroup = new THREE.Group();
+    const status = document.getElementById('status');
+
+    function init() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera.position.z = 15;
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        treeGroup = new THREE.Group();
+        scene.add(treeGroup);
+        scene.add(photoGroup);
+
+        // 创建简易圣诞树粒子
+        const geo = new THREE.SphereGeometry(0.1, 6, 6);
+        for(let i=0; i<300; i++) {
+            const mat = new THREE.MeshBasicMaterial({ color: i%2===0?0xd4af37:0xc41e3a });
+            const m = new THREE.Mesh(geo, mat);
+            const h = Math.random() * 10;
+            const r = (10 - h) * 0.3;
+            const a = Math.random() * Math.PI * 2;
+            m.userData.closed = new THREE.Vector3(Math.cos(a)*r, h-5, Math.sin(a)*r);
+            m.userData.open = new THREE.Vector3((Math.random()-0.5)*20, (Math.random()-0.5)*20, (Math.random()-0.5)*20);
+            m.position.copy(m.userData.closed);
+            treeGroup.add(m);
+            particles.push(m);
+        }
+
+        setupAI();
+        setupPhoto();
+        animate();
+    }
+
+    function setupPhoto() {
+        document.getElementById('photo-upload').addEventListener('change', (e) => {
+            for (let file of e.target.files) {
+                const reader = new FileReader();
+                reader.onload = (f) => {
+                    new THREE.TextureLoader().load(f.target.result, (tex) => {
+                        const plane = new THREE.Mesh(
+                            new THREE.PlaneGeometry(3, 3),
+                            new THREE.MeshBasicMaterial({ map: tex, side: 2 })
+                        );
+                        plane.position.set((Math.random()-0.5)*15, (Math.random()-0.5)*10, (Math.random()-0.5)*10);
+                        photoGroup.add(plane);
+                    });
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    async function setupAI() {
+        const video = document.getElementById('video-input');
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
+        hands.onResults(results => {
+            status.innerText = results.multiHandLandmarks?.length > 0 ? "魔法感应中..." : "请伸出手掌";
+            if (results.multiHandLandmarks?.length > 0) {
+                const lm = results.multiHandLandmarks[0];
+                const isFist = lm[8].y > lm[5].y; // 简易握拳判定
+                particles.forEach(p => p.position.lerp(isFist ? p.userData.closed : p.userData.open, 0.1));
+            }
+        });
+
+        const cam = new Camera(video, {
+            onFrame: async () => { await hands.send({image: video}); },
+            width: 480, height: 360
+        });
+        
+        try {
+            await cam.start();
+            status.innerText = "摄像头已开启";
+        } catch (e) {
+            status.innerText = "错误：请在设置中允许摄像头";
+        }
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        treeGroup.rotation.y += 0.005;
+        photoGroup.rotation.y += 0.002;
+        renderer.render(scene, camera);
+    }
+
+    init();
+</script>
+</body>
+</html>
