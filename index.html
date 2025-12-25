@@ -1,418 +1,237 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>3D Magic Photo Tree - Pro Edition</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Hand Photo Tree</title>
   <style>
-    body { margin: 0; overflow: hidden; background-color: #050505; font-family: sans-serif; touch-action: none; }
-    #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
-    #overlay {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: radial-gradient(circle, #1a1a1a 0%, #050505 100%);
-      z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center;
-      color: #FFD700; text-align: center; transition: opacity 0.5s;
-    }
-    .start-btn { padding: 18px 45px; border: 2px solid #FFD700; background: transparent; color: #FFD700; font-size: 20px; cursor: pointer; border-radius: 50px; font-weight: bold; box-shadow: 0 0 15px rgba(255,215,0,0.3); }
-    #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; padding: 20px; box-sizing: border-box; }
-    .hud { color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); font-size: 11px; font-weight: bold; font-family: monospace; }
-    .input_video {
-      position: absolute; top: 10px; right: 10px; width: 90px; height: 120px; border-radius: 8px;
-      opacity: 0.3; transform: scaleX(-1);
-      border: 1px solid #FFD700; pointer-events: none; background: #000; object-fit: cover;
-    }
-    #upload-zone { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 100; pointer-events: auto; }
-    .upload-label { background: rgba(255,215,0,0.15); border: 1px solid #FFD700; color: #FFD700; padding: 12px 24px; border-radius: 30px; cursor: pointer; font-size: 13px; }
-    #hand-pointer { position: absolute; width: 30px; height: 30px; border: 2px solid #FFD700; border-radius: 50%; pointer-events: none; z-index: 1000; display: none; transform: translate(-50%, -50%); box-shadow: 0 0 15px #FFD700; }
-    #error-msg { color: #ff4444; font-size: 12px; margin-top: 10px; display: none; }
+    body{margin:0;overflow:hidden;background:#050505;font-family:sans-serif;touch-action:none}
+    #c{position:fixed;inset:0}
+    #ui{position:fixed;inset:0;pointer-events:none;padding:14px;box-sizing:border-box;color:#FFD700;font:700 11px/1.2 monospace;text-shadow:0 0 10px rgba(255,215,0,.5)}
+    #overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      background:radial-gradient(circle,#1a1a1a 0%,#050505 100%);color:#FFD700;z-index:9;transition:opacity .35s}
+    #btn{pointer-events:auto;padding:16px 42px;border:2px solid #FFD700;background:transparent;color:#FFD700;
+      font-size:18px;border-radius:999px;font-weight:800}
+    #err{display:none;margin-top:10px;color:#ff4b4b;font:600 12px/1.3 sans-serif;text-align:center;max-width:80vw}
+    #up{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:3;pointer-events:auto}
+    #up label{display:inline-block;border:1px solid #FFD700;background:rgba(255,215,0,.12);color:#FFD700;
+      padding:10px 18px;border-radius:999px;font-size:13px}
+    #p{position:fixed;width:30px;height:30px;border:2px solid #FFD700;border-radius:50%;
+      transform:translate(-50%,-50%);pointer-events:none;display:none;z-index:8;box-shadow:0 0 15px #FFD700}
+    video{position:fixed;top:10px;right:10px;width:90px;height:120px;border-radius:8px;opacity:.28;
+      transform:scaleX(-1);border:1px solid #FFD700;object-fit:cover;background:#000;pointer-events:none;z-index:2}
   </style>
+
+  <!--
+    重要（Wi-Fi 打不开/按钮没反应的根因）：
+    你当前依赖外部 CDN（unpkg/jsdelivr）。部分 Wi-Fi 会拦截这些域名，导致 type=module 的 import 失败，
+    进而“按钮无反应/初始化不执行”。
+
+    最稳的最终解法：把 three、mediapipe 等文件下载到 GitHub Pages 同域目录，例如：
+      /libs/three/three.module.js
+      /libs/three/examples/jsm/...
+      /libs/mediapipe/hands/hands.js
+      /libs/mediapipe/camera_utils/camera_utils.js
+    然后把下面的 CDN URL 改为相对路径（同域加载基本不会被 Wi-Fi 拦截）。
+  -->
 </head>
+
 <body>
-
   <div id="overlay">
-    <h1 style="margin-bottom: 5px;">🎄 圣诞手势相册 🎄</h1>
-    <p style="font-size: 13px; margin-bottom: 25px; opacity: 0.8;">手机端请竖屏使用，光线充足</p>
-    <!-- 兼容：不要 inline onclick，把所有初始化都挂到 addEventListener（iOS 更稳） -->
-    <button class="start-btn" id="mainBtn">开启魔法</button>
-    <div id="error-msg">组件正在初始化，请稍后...</div>
+    <div style="font-size:28px;font-weight:900;margin-bottom:6px">🎄 圣诞手势相册 🎄</div>
+    <div style="font-size:13px;opacity:.8;margin-bottom:18px">建议竖屏，光线充足</div>
+    <button id="btn" type="button">开启魔法</button>
+    <div id="err"></div>
   </div>
 
-  <!-- iOS Safari：建议 autoplay muted playsinline，避免首帧不出 -->
-  <video class="input_video" playsinline autoplay muted></video>
-  <div id="hand-pointer"></div>
+  <!-- iOS Safari：autoplay+muted+playsinline 更容易出首帧 -->
+  <video id="v" playsinline autoplay muted></video>
+  <div id="p"></div>
 
-  <div id="ui-layer">
-    <div class="hud">SYSTEM: <span id="status">INIT...</span></div>
-    <div id="upload-zone">
-      <label class="upload-label">📸 上传照片
-        <input type="file" id="photo-upload" hidden multiple accept="image/*">
-      </label>
-    </div>
+  <div id="ui">SYSTEM: <span id="st">INIT...</span></div>
+  <div id="up">
+    <label>📸 上传照片
+      <input id="file" type="file" hidden multiple accept="image/*" />
+    </label>
   </div>
 
-  <div id="canvas-container"></div>
+  <div id="c"></div>
 
+  <!-- MediaPipe（同样建议未来改为同域自托管） -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
-  <!-- 关键：移除 importmap，直接用完整 ESM URL。iOS Safari 对 importmap 支持不稳 -->
+  <!-- 兜底：不依赖 module。即使 module import 失败，也能提示“CDN 被拦截”。 -->
+  <script>
+    (function () {
+      const $ = (id) => document.getElementById(id);
+      const err = $("err"), btn = $("btn");
+      const show = (t) => { err.style.display = "block"; err.textContent = t; };
+      btn.addEventListener("click", () => {
+        if (typeof window.initExperience === "function") window.initExperience();
+        else show("关键脚本未加载：Wi-Fi 可能拦截了 unpkg/jsdelivr 等 CDN。建议改为 GitHub Pages 同域自托管依赖。");
+      }, { passive: true });
+      setTimeout(() => {
+        if (typeof window.initExperience !== "function") {
+          show("检测到模块脚本未就绪（常见原因：CDN 被拦截/网络劫持/离线）。请换网络或改为同域自托管依赖。");
+        }
+      }, 2500);
+    })();
+  </script>
+
   <script type="module">
+    // 移动端兼容关键点：
+    // 1) 不用 importmap，直接用完整 ESM URL（iOS Safari 对 importmap 支持不稳）
+    // 2) 所有入口挂到 window，便于非 module 兜底脚本调用
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-    import { UnrealBloomPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js";
     import { EffectComposer } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js";
     import { RenderPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js";
-    // 关键：GSAP ESM 在一些环境中 default export 不稳定，使用命名导出
-    import { gsap } from "https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js";
 
-    let scene, camera, renderer, composer, treeGroup, topStar, analyser, dataArray;
-    let particles = [], boxes = [], currentState = "tree";
+    const $ = (id) => document.getElementById(id);
+    const st = $("st"), overlay = $("overlay"), btn = $("btn");
+    const video = $("v"), pointer = $("p"), file = $("file");
+
+    let scene, camera, renderer, composer, group, star;
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    let selectedBox = null;
-    const textureLoader = new THREE.TextureLoader();
+    const texLoader = new THREE.TextureLoader();
+    const particles = [];
+    const boxes = [];
+    let selected = null, state = "tree";
 
-    const MUSIC_URL = "https://link.hhtjim.com/163/2657777735.mp3";
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-    let audio, audioCtx;
+    const setStatus = (t) => st.textContent = t;
 
-    function setStatus(t) {
-      const el = document.getElementById("status");
-      if (el) el.innerText = t;
-    }
-    function showError(t) {
-      const em = document.getElementById("error-msg");
-      if (em) {
-        em.style.display = "block";
-        em.textContent = t;
-      }
-    }
-
-    function createEmojiTexture(emoji) {
-      const canvas = document.createElement("canvas");
-      canvas.width = 64; canvas.height = 64;
-      const ctx = canvas.getContext("2d");
-      ctx.font = "50px serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(emoji, 32, 32);
-      const tex = new THREE.CanvasTexture(canvas);
-      // 移动端颜色空间更一致
-      tex.colorSpace = THREE.SRGBColorSpace;
-      return tex;
-    }
-
-    // iOS Safari：音频必须在用户手势里创建/恢复 AudioContext
-    async function setupAudioFromGesture() {
-      try {
-        audio = new Audio(MUSIC_URL);
-        audio.crossOrigin = "anonymous";
-        audio.loop = true;
-
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === "suspended") await audioCtx.resume();
-
-        const source = audioCtx.createMediaElementSource(audio);
-        analyser = audioCtx.createAnalyser();
-        source.connect(analyser);
-        analyser.connect(audioCtx.destination);
-
-        dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-        // 失败不抛出阻塞：不影响主体验
-        await audio.play();
-      } catch (e) {
-        console.warn("Audio blocked:", e);
-      }
+    function emojiTex(emoji) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const g = c.getContext("2d");
+      g.font = "50px serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(emoji, 32, 32);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
     }
 
     function init3D() {
       scene = new THREE.Scene();
-      treeGroup = new THREE.Group();
-      scene.add(treeGroup);
+      group = new THREE.Group();
+      scene.add(group);
 
-      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1000);
       camera.position.set(0, 12, 45);
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
       renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-      document.getElementById("canvas-container").appendChild(renderer.domElement);
+      $("c").appendChild(renderer.domElement);
 
       composer = new EffectComposer(renderer);
       composer.addPass(new RenderPass(scene, camera));
-      composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.4, 0.85));
 
-      scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-      createTree();
+      scene.add(new THREE.AmbientLight(0xffffff, 0.85));
 
-      document.getElementById("photo-upload").addEventListener("change", handleUpload, { passive: true });
+      // 顶部星星（用简化 Shape；减少依赖与体量）
+      const s = new THREE.Shape();
+      for (let i = 0; i < 10; i++) {
+        const a = i * Math.PI / 5 - Math.PI / 2;
+        const r = i % 2 === 0 ? 2.6 : 1.2;
+        (i ? s.lineTo : s.moveTo).call(s, Math.cos(a) * r, Math.sin(a) * r);
+      }
+      star = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.35, bevelEnabled: false }),
+        new THREE.MeshBasicMaterial({ color: 0xFFD700 }));
+      star.position.y = 17;
+      group.add(star);
 
+      // 粒子数量移动端适当降低，减少卡顿
+      const N = isMobile ? 180 : 260;
+      const maps = [emojiTex("⭐"), emojiTex("🎄"), emojiTex("🎁")];
+      for (let i = 0; i < N; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: maps[i % 3], transparent: true }));
+        sp.scale.set(0.8, 0.8, 1);
+
+        const y = Math.random() * 25 - 10;
+        const rr = (1 - (y + 10) / 25) * 11 + 0.5;
+        const th = y * 1.2 + Math.random() * Math.PI * 2;
+
+        sp.userData.tree = new THREE.Vector3(rr * Math.cos(th), y, rr * Math.sin(th));
+        sp.userData.scatter = new THREE.Vector3((Math.random() - .5) * 60, (Math.random() - .5) * 60, (Math.random() - .5) * 60);
+        sp.position.copy(sp.userData.tree);
+
+        group.add(sp);
+        particles.push(sp);
+      }
+
+      file.addEventListener("change", onUpload, { passive: true });
       animate();
     }
 
-    function createTree() {
-      const starShape = new THREE.Shape();
-      for (let i = 0; i < 10; i++) {
-        const angle = (i * Math.PI) / 5 - Math.PI / 2;
-        const r = i % 2 === 0 ? 2.6 : 1.2;
-        if (i === 0) starShape.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
-        else starShape.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+    function switchState(next) {
+      if (state === next) return;
+      state = next;
+      const to = (p, t) => { p.position.lerp(t, 0.08); }; // 简化：用 lerp 代替 gsap（减少依赖与体量）
+      // 在 animate 里逐帧 lerp
+      particles.forEach(p => p.userData.target = (next === "tree" ? p.userData.tree : p.userData.scatter));
+      particles.forEach(p => to(p, p.userData.target));
+    }
+
+    function checkHit() {
+      raycaster.setFromCamera(mouse, camera);
+      const hit = raycaster.intersectObjects(boxes, false);
+      const box = hit[0]?.object || null;
+      if (box === selected) return;
+
+      // 还原旧的
+      if (selected) {
+        selected.position.copy(selected.userData.origin);
+        selected.scale.set(1, 1, 1);
+        selected.rotation.set(0, 0, 0);
       }
-      topStar = new THREE.Mesh(
-        new THREE.ExtrudeGeometry(starShape, { depth: 0.4, bevelEnabled: false }),
-        new THREE.MeshBasicMaterial({ color: 0xFFD700 })
-      );
-      topStar.position.y = 17;
-      treeGroup.add(topStar);
+      selected = box;
 
-      const emojiTextures = [createEmojiTexture("⭐"), createEmojiTexture("🎄"), createEmojiTexture("🎁")];
-      for (let i = 0; i < 300; i++) {
-        const material = new THREE.SpriteMaterial({ map: emojiTextures[i % 3], transparent: true });
-        const sprite = new THREE.Sprite(material);
-        sprite.scale.set(0.8, 0.8, 1);
-
-        const y = (Math.random() * 25) - 10;
-        const r = (1 - (y + 10) / 25) * 11 + 0.5;
-        const theta = y * 1.2 + Math.random() * Math.PI * 2;
-
-        sprite.userData.treePos = new THREE.Vector3(r * Math.cos(theta), y, r * Math.sin(theta));
-        sprite.userData.scatterPos = new THREE.Vector3(
-          (Math.random() - 0.5) * 60,
-          (Math.random() - 0.5) * 60,
-          (Math.random() - 0.5) * 60
-        );
-
-        sprite.position.copy(sprite.userData.treePos);
-        treeGroup.add(sprite);
-        particles.push(sprite);
+      // 放大新的
+      if (selected) {
+        selected.position.set(0, 10, 25);
+        selected.scale.set(4.5, 4.5, 4.5);
+        selected.rotation.y = Math.PI * 2;
       }
+    }
+
+    function onUpload(e) {
+      const files = e.target.files;
+      if (!files?.length) return;
+
+      for (const f of files) {
+        const url = URL.createObjectURL(f);
+        texLoader.load(url, (tex) => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          const m = new THREE.MeshStandardMaterial({ map: tex });
+          const box = new THREE.Mesh(new THREE.BoxGeometry(3.5, 3.5, 3.5), m);
+
+          const t = Math.random();
+          const y = t * 22 - 7;
+          const r = (1 - t) * 11 + 3.5;
+          const pos = new THREE.Vector3(r * Math.cos(t * 22), y, r * Math.sin(t * 22));
+
+          box.position.set(0, -30, 0);
+          box.userData.origin = pos.clone();
+          group.add(box);
+          boxes.push(box);
+
+          URL.revokeObjectURL(url); // 移动端关键：释放内存
+        }, undefined, () => URL.revokeObjectURL(url));
+      }
+
+      e.target.value = ""; // 允许重复选择同一张图
     }
 
     async function initMediaPipe() {
-      const video = document.querySelector(".input_video");
-      const pointer = document.getElementById("hand-pointer");
-      const statusDisp = document.getElementById("status");
+      const HandsLib = window.Hands || window.mediapipe?.hands?.Hands;
+      if (!HandsLib) { setStatus("MP_FAIL"); return; }
+      if (!window.Camera) { setStatus("CAM_UTIL_FAIL"); return; }
 
-      // 关键：判空。iOS 上 CDN/网络慢时可能 hands.js 尚未就绪
-      const HandsLib = window.Hands || (window.mediapipe && window.mediapipe.hands && window.mediapipe.hands.Hands);
-      if (!HandsLib) {
-        statusDisp.innerText = "MP_FAIL";
-        showError("MediaPipe Hands 未加载成功，请刷新或检查网络。");
-        return;
-      }
-
-      const hands = new HandsLib({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-      });
-
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 0,
-        minDetectionConfidence: 0.4,
-        minTrackingConfidence: 0.4
-      });
-
-      hands.onResults((res) => {
-        if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
-          const pts = res.multiHandLandmarks[0];
-          const indexTip = pts[8];
-          const thumbTip = pts[4];
-
-          pointer.style.display = "block";
-
-          const screenX = (1 - indexTip.x) * window.innerWidth;
-          const screenY = indexTip.y * window.innerHeight;
-          pointer.style.left = screenX + "px";
-          pointer.style.top = screenY + "px";
-
-          mouse.x = (screenX / window.innerWidth) * 2 - 1;
-          mouse.y = -(screenY / window.innerHeight) * 2 + 1;
-
-          const dist = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
-          if (dist < 0.1) {
-            switchState("scatter");
-            if (selectedBox) shrinkBox(selectedBox);
-          } else {
-            switchState("tree");
-            checkIntersection();
-          }
-          statusDisp.innerText = "ACTIVE";
-        } else {
-          pointer.style.display = "none";
-          statusDisp.innerText = "SEARCHING...";
-        }
-      });
-
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const cameraConstraints = isMobile ? { width: 480, height: 640 } : { width: 640, height: 480 };
-
-      if (!window.Camera) {
-        statusDisp.innerText = "CAM_UTIL_FAIL";
-        showError("MediaPipe Camera 工具未加载成功。");
-        return;
-      }
-
-      const cam = new window.Camera(video, {
-        onFrame: async () => {
-          try {
-            await hands.send({ image: video });
-          } catch (e) {
-            // iOS 偶发：首帧/权限切换导致 send 报错，避免把程序打挂
-            console.warn("hands.send error:", e);
-          }
-        },
-        ...cameraConstraints
-      });
-
-      try {
-        await cam.start();
-        statusDisp.innerText = "CAM_OK";
-      } catch (err) {
-        statusDisp.innerText = "CAM_ERR";
-        console.error(err);
-        showError("摄像头启动失败：请允许权限，并确保使用 HTTPS。");
-      }
-    }
-
-    function checkIntersection() {
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(boxes, false);
-      if (intersects.length > 0) {
-        const box = intersects[0].object;
-        if (selectedBox !== box) {
-          if (selectedBox) shrinkBox(selectedBox);
-          selectedBox = box;
-          expandBox(box);
-        }
-      } else if (selectedBox) {
-        shrinkBox(selectedBox);
-        selectedBox = null;
-      }
-    }
-
-    function expandBox(box) {
-      gsap.to(box.position, { x: 0, y: 10, z: 25, duration: 0.6, ease: "power2.out" });
-      gsap.to(box.scale, { x: 4.5, y: 4.5, z: 4.5, duration: 0.6 });
-      gsap.to(box.rotation, { y: Math.PI * 2, duration: 0.6 });
-    }
-
-    function shrinkBox(box) {
-      gsap.to(box.position, { x: box.userData.originPos.x, y: box.userData.originPos.y, z: box.userData.originPos.z, duration: 0.4 });
-      gsap.to(box.scale, { x: 1, y: 1, z: 1, duration: 0.4 });
-      gsap.to(box.rotation, { y: 0, duration: 0.4 });
-    }
-
-    function handleUpload(e) {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
-
-      for (const file of files) {
-        const url = URL.createObjectURL(file);
-
-        textureLoader.load(
-          url,
-          (tex) => {
-            tex.colorSpace = THREE.SRGBColorSpace;
-
-            const box = new THREE.Mesh(
-              new THREE.BoxGeometry(3.5, 3.5, 3.5),
-              new THREE.MeshStandardMaterial({ map: tex })
-            );
-
-            const t = Math.random();
-            const y = t * 22 - 7;
-            const r = (1 - t) * 11 + 3.5;
-            const pos = new THREE.Vector3(r * Math.cos(t * 22), y, r * Math.sin(t * 22));
-
-            box.position.set(0, -30, 0);
-            box.userData.originPos = pos.clone();
-            treeGroup.add(box);
-            gsap.to(box.position, { x: pos.x, y: pos.y, z: pos.z, duration: 1.5, ease: "back.out(1.2)" });
-            boxes.push(box);
-
-            // 关键：释放 objectURL，移动端否则很容易内存暴涨
-            URL.revokeObjectURL(url);
-          },
-          undefined,
-          (err) => {
-            console.warn("Texture load error:", err);
-            URL.revokeObjectURL(url);
-          }
-        );
-      }
-
-      // 允许重复上传同一张图片触发 change
-      e.target.value = "";
-    }
-
-    function switchState(next) {
-      if (currentState === next) return;
-      currentState = next;
-      particles.forEach((p, i) => {
-        const target = next === "tree" ? p.userData.treePos : p.userData.scatterPos;
-        gsap.to(p.position, { x: target.x, y: target.y, z: target.z, duration: 1.2, delay: i * 0.001 });
-      });
-    }
-
-    function animate() {
-      requestAnimationFrame(animate);
-
-      if (analyser && topStar && dataArray) {
-        analyser.getByteFrequencyData(dataArray);
-
-        // 兼容：避免 reduce 在极端情况下造成额外 GC 压力（移动端更稳）
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        const avg = sum / dataArray.length;
-
-        const s = 1 + avg / 70;
-        topStar.scale.set(s, s, s);
-        topStar.rotation.z += 0.01;
-      }
-
-      if (!selectedBox && treeGroup) treeGroup.rotation.y += 0.005;
-      composer.render();
-    }
-
-    function onResize() {
-      if (!camera || !renderer || !composer) return;
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      // 关键：composer 也要 resize，否则 bloom 尺寸错位
-      composer.setSize(window.innerWidth, window.innerHeight);
-    }
-
-    window.addEventListener("resize", onResize, { passive: true });
-    window.addEventListener("orientationchange", () => setTimeout(onResize, 200), { passive: true });
-
-    // 统一入口：所有初始化都在“用户点击”触发，iOS 更稳
-    async function initExperience() {
-      const btn = document.getElementById("mainBtn");
-      btn.innerText = "初始化中...";
-      btn.disabled = true;
-
-      setStatus("INIT");
-
-      // 1) 音频（不成功也不阻塞）
-      await setupAudioFromGesture();
-
-      // 2) 3D
-      init3D();
-
-      // 3) overlay 淡出后再开摄像头，减少 iOS 首帧失败概率
-      const overlay = document.getElementById("overlay");
-      overlay.style.opacity = "0";
-      setTimeout(() => { overlay.style.display = "none"; }, 500);
-
-      // 4) MediaPipe
-      await initMediaPipe();
-    }
-
-    document.getElementById("mainBtn").addEventListener("click", initExperience);
-  </script>
-</body>
-</html>
+      const hands = new HandsLib({ locateFile: (f) => `h
