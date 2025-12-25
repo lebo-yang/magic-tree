@@ -58,8 +58,8 @@
   <div id="c"></div>
 
   <!-- MediaPipe（同样建议未来改为同域自托管） -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+ <script src="./libs/mediapipe/hands/hands.js"></script>
+<script src="./libs/mediapipe/camera_utils/camera_utils.js"></script>
 
   <!-- 兜底：不依赖 module。即使 module import 失败，也能提示“CDN 被拦截”。 -->
   <script>
@@ -83,9 +83,10 @@
     // 移动端兼容关键点：
     // 1) 不用 importmap，直接用完整 ESM URL（iOS Safari 对 importmap 支持不稳）
     // 2) 所有入口挂到 window，便于非 module 兜底脚本调用
-    import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-    import { EffectComposer } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js";
-    import { RenderPass } from "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js";
+   import * as THREE from './libs/three/three.module.js';
+import { EffectComposer } from './libs/three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from './libs/three/examples/jsm/postprocessing/RenderPass.js';
+
 
     const $ = (id) => document.getElementById(id);
     const st = $("st"), overlay = $("overlay"), btn = $("btn");
@@ -235,3 +236,4 @@
       if (!window.Camera) { setStatus("CAM_UTIL_FAIL"); return; }
 
       const hands = new HandsLib({ locateFile: (f) => `h
+
