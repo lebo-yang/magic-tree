@@ -82,7 +82,9 @@
             }
         }
     </script>
-
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <script type="module">
         import * as THREE from 'three';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -201,15 +203,35 @@
 
         function onResults(results) {
             const cursor = document.getElementById('hand-cursor');
+            const modeText = document.getElementById('mode-text');
+            
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const pts = results.multiHandLandmarks[0];
                 const indexTip = pts[8];
                 const thumbTip = pts[4];
-                const wrist = pts[0];
 
-                // 映射坐标
+                // 映射坐标并显示光标
                 const x = (1 - indexTip.x) * window.innerWidth;
                 const y = indexTip.y * window.innerHeight;
                 cursor.style.display = 'block';
                 cursor.style.left = x + 'px';
-                cursor.
+                cursor.style.top = y + 'px';
+
+                // --- 交互逻辑 ---
+                // 计算大拇指和食指的距离来判断“捏合”动作
+                const distance = Math.sqrt(
+                    Math.pow(indexTip.x - thumbTip.x, 2) + 
+                    Math.pow(indexTip.y - thumbTip.y, 2)
+                );
+
+                if (distance < 0.05) { // 捏合手势
+                    switchState('scatter');
+                } else { // 张开手势
+                    switchState('tree');
+                }
+            } else {
+                cursor.style.display = 'none';
+                modeText.innerText = "WAITING...";
+            }
+        }
+
