@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Magic Photo Tree - Stable</title>
+    <title>3D Magic Photo Tree - Emoji Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050505; font-family: sans-serif; touch-action: none; }
         #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
@@ -75,6 +75,19 @@
 
         const MUSIC_URL = 'https://link.hhtjim.com/163/2657777735.mp3'; 
 
+        // 动态创建 Emoji 纹理的功能
+        function createEmojiTexture(emoji) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.font = '50px serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(emoji, 32, 32);
+            return new THREE.CanvasTexture(canvas);
+        }
+
         window.initExperience = function() {
             const btn = document.querySelector('.start-btn');
             btn.innerText = "加载中...";
@@ -83,7 +96,6 @@
             setupAudio();
             init3D();
             
-            // 检查库是否加载成功，如果未加载，提示错误
             if (typeof Hands === 'undefined') {
                 document.getElementById('error-msg').style.display = 'block';
                 document.getElementById('status').innerText = "LIBRARY ERROR";
@@ -133,6 +145,7 @@
         }
 
         function createTree() {
+            // 顶部的 3D 星星保持不变
             const starShape = new THREE.Shape();
             for (let i = 0; i < 10; i++) {
                 const angle = (i * Math.PI) / 5 - Math.PI / 2;
@@ -144,50 +157,58 @@
             topStar.position.y = 17;
             treeGroup.add(topStar);
 
-            const mats = [new THREE.MeshStandardMaterial({ color: 0xFFD700, emissive: 0xFFD700, emissiveIntensity: 0.4 }), new THREE.MeshStandardMaterial({ color: 0x00FF66 }), new THREE.MeshStandardMaterial({ color: 0xFF2244 })];
+            // 粒子材质替换为 Emoji 贴图
+            const emojiTextures = [
+                createEmojiTexture('⭐'), // 原黄色
+                createEmojiTexture('🎄'), // 原绿色
+                createEmojiTexture('🎁')  // 原红色
+            ];
+
             for (let i = 0; i < 300; i++) {
-                const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), mats[i % 3]);
+                const material = new THREE.SpriteMaterial({ 
+                    map: emojiTextures[i % 3],
+                    transparent: true 
+                });
+                const sprite = new THREE.Sprite(material);
+                
+                // 稍微调大一点尺寸，Emoji 比较容易看清
+                sprite.scale.set(0.8, 0.8, 1);
+
                 const y = (Math.random() * 25) - 10;
                 const r = (1 - (y + 10) / 25) * 11 + 0.5;
                 const theta = y * 1.2 + Math.random() * Math.PI * 2;
-                mesh.userData.treePos = new THREE.Vector3(r * Math.cos(theta), y, r * Math.sin(theta));
-                mesh.userData.scatterPos = new THREE.Vector3((Math.random()-0.5)*60, (Math.random()-0.5)*60, (Math.random()-0.5)*60);
-                mesh.position.copy(mesh.userData.treePos);
-                treeGroup.add(mesh);
-                particles.push(mesh);
+                
+                sprite.userData.treePos = new THREE.Vector3(r * Math.cos(theta), y, r * Math.sin(theta));
+                sprite.userData.scatterPos = new THREE.Vector3((Math.random()-0.5)*60, (Math.random()-0.5)*60, (Math.random()-0.5)*60);
+                
+                sprite.position.copy(sprite.userData.treePos);
+                treeGroup.add(sprite);
+                particles.push(sprite);
             }
         }
 
         async function initMediaPipe() {
             const video = document.querySelector('.input_video');
             const pointer = document.getElementById('hand-pointer');
-            
-            // 兼容性库检测
             const HandsLib = window.Hands || (window.mediapipe && window.mediapipe.hands && window.mediapipe.hands.Hands);
             if (!HandsLib) {
                 document.getElementById('status').innerText = "CDN_ERR";
                 return;
             }
-
             const hands = new HandsLib({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
             });
-
             hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-
             hands.onResults((res) => {
                 if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
                     const pts = res.multiHandLandmarks[0];
                     const indexTip = pts[8];
                     const thumbTip = pts[4];
-                    
                     pointer.style.display = 'block';
                     pointer.style.left = (1 - indexTip.x) * window.innerWidth + 'px';
                     pointer.style.top = indexTip.y * window.innerHeight + 'px';
-
                     mouse.x = ((1 - indexTip.x) * 2) - 1;
                     mouse.y = -(indexTip.y * 2) + 1;
-
                     const dist = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
                     if (dist < 0.08) {
                         switchState('scatter');
@@ -202,7 +223,6 @@
                     document.getElementById('status').innerText = "SEARCHING";
                 }
             });
-
             const cam = new window.Camera(video, { onFrame: async () => { await hands.send({ image: video }); }, width: 640, height: 480 });
             cam.start().then(() => {
                 document.getElementById('status').innerText = "CAMERA_ON";
